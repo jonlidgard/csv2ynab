@@ -1,5 +1,6 @@
 ## usage: ynab_csv.py [-h] [-c] [-m] [-t] [-o OUTPUT] csvfile
 
+```
 Process Revolut csv statement files for import into YNAB.
 
 positional arguments:
@@ -12,7 +13,7 @@ optional arguments:
   -t, --topup           Skip Top-Up, Auto Top-Up (Revolut) & Add money from a Bank Account (PayPal) entries
   -o OUTPUT, --output OUTPUT
                         File to write csv to, else output to stdout
-
+```
 
 Revolut files are processed to remove the ',' from the Inflow & Outflow fields
 
