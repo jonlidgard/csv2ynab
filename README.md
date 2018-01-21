@@ -1,5 +1,4 @@
-## usage: ynab_csv.py [-h] [-c] [-m] [-t] [-o OUTPUT] csvfile
-
+## csv2ynab
 ```
 usage: csv2ynab [options] <source> <dest>
 
