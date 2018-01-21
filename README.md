@@ -1,18 +1,22 @@
 ## usage: ynab_csv.py [-h] [-c] [-m] [-t] [-o OUTPUT] csvfile
 
 ```
-Process Revolut csv statement files for import into YNAB.
+Pusage: csv2ynab [options] <source> <dest>
+
+description: csv2ynab processes Revolut & PayPal csv files for import into YNAB
 
 positional arguments:
-  csvfile               the .csv file to process
+  source                the .csv file to process
+  dest                  the output file (defaults to stdout)
 
 optional arguments:
   -h, --help            show this help message and exit
   -c, --category        Fill in the category field
   -m, --memo            Fill in the Memo field with Exchange info
-  -t, --topup           Skip Top-Up, Auto Top-Up (Revolut) & Add money from a Bank Account (PayPal) entries
-  -o OUTPUT, --output OUTPUT
-                        File to write csv to, else output to stdout
+  -t, --topup           Skip Top-Up & Auto Top-Up entries
+  -E ENCODING, --encoding ENCODING
+                        File encoding (default: utf-8)
+  -V, --version         show version and exit
 ```
 
 Revolut files are processed to remove the ',' from the Inflow & Outflow fields

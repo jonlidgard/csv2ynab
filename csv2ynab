@@ -12,18 +12,9 @@ import sys
 import csv
 from argparse import RawTextHelpFormatter, ArgumentParser
 import datetime
+import traceback
 
-
-
-import itertools as it
-
-from meza.io import read_csv, IterStringIO
-from csv2ofx import utils
-from csv2ofx.ofx import OFX
-from csv2ofx.mappings.default import mapping
-
-#import locale
-#from decimal import Decimal
+VERSION = '0.2'
 
 BASE_CURRENCY = 'GBP'
 
@@ -59,12 +50,12 @@ parser = ArgumentParser(description="description: csv2ynab processes Revolut & P
                         prog='csv2ynab', usage='%(prog)s [options] <source> <dest>',
                         formatter_class=RawTextHelpFormatter)
 
-parser.add_argument(dest='source', help='the .csv file to process')
+parser.add_argument(dest='source', nargs='?', help='the .csv file to process')
 parser.add_argument(dest='dest', nargs='?', help='the output file (defaults to stdout)')
-parser.add_argument('-c', '--category', action='count', help='Fill in the category field')
-parser.add_argument('-m', '--memo', action='count', help='Fill in the Memo field with Exchange info')
-parser.add_argument('-t', '--topup', action='count', help='Skip Top-Up & Auto Top-Up entries')
 parser.add_argument('-E', '--encoding', default='utf-8', help="File encoding (default: utf-8)")
+parser.add_argument('-c', '--category', action='count', help='Fill in the category field')
+parser.add_argument('-m', '--memo', action='count', help='Fill in the Memo field')
+parser.add_argument('-b', '--topup', action='count', help='Skip Bank entries')
 parser.add_argument('-V', '--version', help="show version and exit", action='store_true', default=False)
 
 args = parser.parse_args()
@@ -162,24 +153,6 @@ class RevolutCSV(baseCSV):
             self.writeRow(y_row)
 
 
-
-class RevolutOFX(baseCSV):
-    def __init__(self, args, reader, write):
-        baseCSV.__init__(self, args, reader, writer)
-
-    def Convert(self):
-        ofx = OFX(mapping)
-#        records = self.reader.rows
-#        groups = ofx.gen_groups(records)
-#        trxns = ofx.gen_trxns(groups)
-#        cleaned_trxns = ofx.clean_trxns(trxns)
-#        data = utils.gen_data(cleaned_trxns)
-#        content = it.chain([ofx.header(), ofx.gen_body(data), ofx.footer()])
-
-#        for line in IterStringIO(content):
-#            print(line)
-
-
 class PaypalCSV(baseCSV):
     def __init__(self, args, reader, writer):
         baseCSV.__init__(self, args, reader, writer)
@@ -257,8 +230,7 @@ def run():  # noqa: C901
     """
 
     if args.version:
-        from . import __version__ as version
-        print('v%s' % version)
+        print('v%s' % VERSION)
         exit(0)
 
 
@@ -282,7 +254,7 @@ def run():  # noqa: C901
         reader = csv.DictReader(source, delimiter=dialect.delimiter)
 
     except Exception as err:  # pylint: disable=broad-except
-        source.close()
+        source.close() if args.source else parser.print_help()
         exit(err)
 
     try:
@@ -292,22 +264,14 @@ def run():  # noqa: C901
 
         if REVOLUT_IDENTIFIER_KEY in reader.fieldnames:
             csv_processor = RevolutCSV(args, reader, writer)
-    #        csv_processor = RevolutOFX(args, reader, writer)
         elif PAYPAL_IDENTIFIER_KEY in reader.fieldnames:
             csv_processor = PaypalCSV(args, reader, writer)
         else:
-            print("ERROR: Unrecognised file format.", file=sys.stderr)
-            exit(1)
+            raise RuntimeError("Unrecognised file format.")
 
         csv_processor.Convert()
 
-    except ValueError:
-        # csv2ofx called with no arguments
-        msg = 0
-        parser.print_help()
-
     finally:
-#        exit(1)
         source.close() if args.source else None
         dest.close() if args.dest else None
 
