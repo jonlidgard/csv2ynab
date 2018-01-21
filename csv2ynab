@@ -1,21 +1,30 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# vim: sw=4:ts=4:expandtab
 
-"""ynab_csv.py: Converts Revolut csv file to an acceptable format for input to YNAB."""
 
-__author__      = "Jon Lidgard"
-__license__ = "GPL"
-__version__ = "0.1"
-__maintainer__ = "Jon Lidgard"
-__email__ = "jonlidgard@gmail.com"
-__status__ = "Development"
+"""csv2ynab: Converts Revolut & Paypal csv files to an acceptable format for input to YNAB."""
+
+from __future__ import absolute_import, print_function
 
 import sys
 import csv
 import argparse
 import datetime
+
+
+
+import itertools as it
+
+from meza.io import read_csv, IterStringIO
+from csv2ofx import utils
+from csv2ofx.ofx import OFX
+from csv2ofx.mappings.default import mapping
+
 #import locale
 #from decimal import Decimal
 
+BASE_CURRENCY = 'GBP'
 
 YNAB_HEADER_DATE = 'Date'
 YNAB_HEADER_PAYEE = 'Payee'
@@ -35,12 +44,17 @@ PAYPAL_HEADER_DATE = 'Date'
 PAYPAL_HEADER_PAYEE = ' Name'
 PAYPAL_HEADER_TYPE = ' Type'
 PAYPAL_HEADER_MEMO = ' Item Title'
-PAYPAL_HEADER_INFLOW = ' Net'
+PAYPAL_HEADER_NET = ' Net'
+PAYPAL_HEADER_CURRENCY = ' Currency'
+PAYPAL_HEADER_STATUS = ' Status'
+PAYPAL_HEADER_REF_TRANS = ' Reference Txn ID'
+PAYPAL_HEADER_TRANS_ID = ' Transaction ID'
+
 PAYPAL_IDENTIFIER_KEY = ' Counterparty Status'
 
 
 parser = argparse.ArgumentParser(description='Process Revolut csv statement files for import into YNAB.')
-parser.add_argument('csvfile', help='the .csv file to process')
+parser.add_argument('<source>', help='the .csv file to process')
 parser.add_argument('-c', '--category', action='count', help='Fill in the category field')
 parser.add_argument('-m', '--memo', action='count', help='Fill in the Memo field with Exchange info')
 parser.add_argument('-t', '--topup', action='count', help='Skip Top-Up & Auto Top-Up entries')
@@ -62,6 +76,15 @@ class baseCSV:
     def isBankTopUp(self, row):
         return False
 
+    def absAmount(self, value):
+        if value[:1] == '-':
+            value = value[1:]
+        return value
+
+    def processCurrency(self, amount):
+        """ Remove the comma in n,nnn.nn"""
+        return amount.replace(',','')
+
     def printRow(self, y_row):
         y_line = y_row[YNAB_HEADER_DATE] + ',"' + y_row[YNAB_HEADER_PAYEE] + '","' + y_row[YNAB_HEADER_CATEGORY] + \
             '","' + y_row[YNAB_HEADER_MEMO] + '",' + y_row[YNAB_HEADER_OUTFLOW] + ',' + y_row[YNAB_HEADER_INFLOW]
@@ -78,6 +101,10 @@ class baseCSV:
 
 
     def writeRow(self, y_row):
+        # Remove ',' from currency amounts
+        y_row[YNAB_HEADER_OUTFLOW] = self.processCurrency(y_row[YNAB_HEADER_OUTFLOW])
+        y_row[YNAB_HEADER_INFLOW] = self.processCurrency(y_row[YNAB_HEADER_INFLOW])
+
         if self.args.output:
             writer.writerow(y_row)
         else:
@@ -147,23 +174,55 @@ class RevolutCSV(baseCSV):
 
 
 
+class RevolutOFX(baseCSV):
+    def __init__(self, args, reader, write):
+        baseCSV.__init__(self, args, reader, writer)
+
+    def Convert(self):
+        ofx = OFX(mapping)
+        records = self.reader.rows
+        groups = ofx.gen_groups(records)
+        trxns = ofx.gen_trxns(groups)
+        cleaned_trxns = ofx.clean_trxns(trxns)
+        data = utils.gen_data(cleaned_trxns)
+        content = it.chain([ofx.header(), ofx.gen_body(data), ofx.footer()])
+
+        for line in IterStringIO(content):
+            print(line)
+
+
 class PaypalCSV(baseCSV):
     def __init__(self, args, reader, writer):
         baseCSV.__init__(self, args, reader, writer)
+
+    def isCompleted(self, row):
+        return row[PAYPAL_HEADER_STATUS] == 'Completed'
 
     def isBankTopUp(self, row):
         return row[PAYPAL_HEADER_PAYEE] == 'Bank Account' and row[PAYPAL_HEADER_TYPE] == 'Add Money from a Bank Account'
 
     def isTemporaryHold(self, row):
-        return row[PAYPAL_HEADER_PAYEE] == 'PayPal' and row[PAYPAL_HEADER_TYPE] == "Temporary Hold"
+        return row[PAYPAL_HEADER_PAYEE] == 'PayPal' and row[PAYPAL_HEADER_TYPE] == "Temporary Hold" and \
+            not self.isCompleted(row)
+
+    def isPendingBalancePayment(self, row):
+        return row[PAYPAL_HEADER_PAYEE] == 'PayPal' and row[PAYPAL_HEADER_TYPE] == "Pending Balance Payment" and \
+            not self.isCompleted(row)
 
     def isCurrencyConversion(self, row):
         return row[PAYPAL_HEADER_TYPE] == 'Currency Conversion'
 
+    def isBaseCurrency(self, row):
+        return row[PAYPAL_HEADER_CURRENCY] == BASE_CURRENCY
+
     def Convert(self):
         self.writeHeader()
+        trans_id = '?????????????'
 
         for p_row in self.reader:
+
+            if self.isPendingBalancePayment(p_row):
+                continue
 
             if self.args.topup and self.isBankTopUp(p_row):
                 continue
@@ -172,6 +231,9 @@ class PaypalCSV(baseCSV):
                 continue
 
             if self.isCurrencyConversion(p_row):
+                if self.isBaseCurrency(p_row):
+                    trans_id = p_row[PAYPAL_HEADER_REF_TRANS]
+                    base_amount = p_row[PAYPAL_HEADER_NET]
                 continue
 
 
@@ -188,7 +250,14 @@ class PaypalCSV(baseCSV):
                 y_row[YNAB_HEADER_MEMO] = ''
 
             y_row[YNAB_HEADER_OUTFLOW] = ''
-            y_row[YNAB_HEADER_INFLOW] = p_row[PAYPAL_HEADER_INFLOW]
+            if p_row[PAYPAL_HEADER_TRANS_ID] == trans_id:
+                y_row[YNAB_HEADER_INFLOW] = base_amount
+                y_row[YNAB_HEADER_MEMO] = y_row[YNAB_HEADER_MEMO] + \
+                    " (" + self.absAmount(p_row[PAYPAL_HEADER_NET]) + p_row[PAYPAL_HEADER_CURRENCY] + ")"
+                trans_id = '?????????????'
+                base_amount = ''
+            else:
+                y_row[YNAB_HEADER_INFLOW] = p_row[PAYPAL_HEADER_NET]
 
             self.writeRow(y_row)
 
@@ -215,6 +284,7 @@ with open(args.csvfile, newline='') as csvfile:
     #    print (reader.fieldnames)
     if REVOLUT_IDENTIFIER_KEY in reader.fieldnames:
         csv_processor = RevolutCSV(args, reader, writer)
+#        csv_processor = RevolutOFX(args, reader, writer)
     elif PAYPAL_IDENTIFIER_KEY in reader.fieldnames:
         csv_processor = PaypalCSV(args, reader, writer)
     else:
@@ -223,3 +293,13 @@ with open(args.csvfile, newline='') as csvfile:
 
     csv_processor.Convert()
 
+ofx = OFX(mapping)
+records = read_csv('path/to/file.csv')
+groups = ofx.gen_groups(records)
+trxns = ofx.gen_trxns(groups)
+cleaned_trxns = ofx.clean_trxns(trxns)
+data = utils.gen_data(cleaned_trxns)
+content = it.chain([ofx.header(), ofx.gen_body(data), ofx.footer()])
+
+for line in IterStringIO(content):
+    print(line)
