@@ -27,38 +27,39 @@ from csv2ofx.mappings.default import mapping
 
 BASE_CURRENCY = 'GBP'
 
-YNAB_HEADER_DATE = 'Date'
-YNAB_HEADER_PAYEE = 'Payee'
-YNAB_HEADER_CATEGORY = 'Category'
-YNAB_HEADER_MEMO = 'Memo'
-YNAB_HEADER_OUTFLOW = 'Outflow'
-YNAB_HEADER_INFLOW = 'Inflow'
+YNAB_FIELD_DATE = 'Date'
+YNAB_FIELD_PAYEE = 'Payee'
+YNAB_FIELD_CATEGORY = 'Category'
+YNAB_FIELD_MEMO = 'Memo'
+YNAB_FIELD_OUTFLOW = 'Outflow'
+YNAB_FIELD_INFLOW = 'Inflow'
+YNAB_HEADER = [YNAB_FIELD_DATE, YNAB_FIELD_PAYEE, YNAB_FIELD_CATEGORY, YNAB_FIELD_MEMO, YNAB_FIELD_OUTFLOW, YNAB_FIELD_INFLOW]
 
-REVOLUT_HEADER_DATE = 'Completed Date'
-REVOLUT_HEADER_PAYEE = 'Reference'
-REVOLUT_HEADER_CATEGORY = 'Category'
-REVOLUT_HEADER_OUTFLOW = 'Paid Out (GBP)'
-REVOLUT_HEADER_INFLOW = 'Paid In (GBP)'
-REVOLUT_IDENTIFIER_KEY = REVOLUT_HEADER_DATE
+REVOLUT_FIELD_DATE = 'Completed Date'
+REVOLUT_FIELD_PAYEE = 'Reference'
+REVOLUT_FIELD_CATEGORY = 'Category'
+REVOLUT_FIELD_OUTFLOW = 'Paid Out (GBP)'
+REVOLUT_FIELD_INFLOW = 'Paid In (GBP)'
+REVOLUT_IDENTIFIER_KEY = REVOLUT_FIELD_DATE
 
-PAYPAL_HEADER_DATE = 'Date'
-PAYPAL_HEADER_PAYEE = ' Name'
-PAYPAL_HEADER_TYPE = ' Type'
-PAYPAL_HEADER_MEMO = ' Item Title'
-PAYPAL_HEADER_NET = ' Net'
-PAYPAL_HEADER_CURRENCY = ' Currency'
-PAYPAL_HEADER_STATUS = ' Status'
-PAYPAL_HEADER_REF_TRANS = ' Reference Txn ID'
-PAYPAL_HEADER_TRANS_ID = ' Transaction ID'
-
+PAYPAL_FIELD_DATE = 'Date'
+PAYPAL_FIELD_PAYEE = ' Name'
+PAYPAL_FIELD_TYPE = ' Type'
+PAYPAL_FIELD_MEMO = ' Item Title'
+PAYPAL_FIELD_NET = ' Net'
+PAYPAL_FIELD_CURRENCY = ' Currency'
+PAYPAL_FIELD_STATUS = ' Status'
+PAYPAL_FIELD_REF_TRANS = ' Reference Txn ID'
+PAYPAL_FIELD_TRANS_ID = ' Transaction ID'
 PAYPAL_IDENTIFIER_KEY = ' Counterparty Status'
+
 
 
 parser = ArgumentParser(description="description: csv2ynab processes Revolut & PayPal csv files for import into YNAB",
                         prog='csv2ynab', usage='%(prog)s [options] <source> <dest>',
                         formatter_class=RawTextHelpFormatter)
 
-parser.add_argument(dest='source', nargs='?', help='the .csv file to process')
+parser.add_argument(dest='source', help='the .csv file to process')
 parser.add_argument(dest='dest', nargs='?', help='the output file (defaults to stdout)')
 parser.add_argument('-c', '--category', action='count', help='Fill in the category field')
 parser.add_argument('-m', '--memo', action='count', help='Fill in the Memo field with Exchange info')
@@ -66,12 +67,7 @@ parser.add_argument('-t', '--topup', action='count', help='Skip Top-Up & Auto To
 parser.add_argument('-E', '--encoding', default='utf-8', help="File encoding (default: utf-8)")
 parser.add_argument('-V', '--version', help="show version and exit", action='store_true', default=False)
 
-
-
 args = parser.parse_args()
-
-results = []
-YNAB_FIELDNAMES = [YNAB_HEADER_DATE, YNAB_HEADER_PAYEE, YNAB_HEADER_CATEGORY, YNAB_HEADER_MEMO, YNAB_HEADER_OUTFLOW, YNAB_HEADER_INFLOW]
 
 
 class baseCSV:
@@ -99,8 +95,8 @@ class baseCSV:
 
     def writeRow(self, y_row):
         # Remove ',' from currency amounts
-        y_row[YNAB_HEADER_OUTFLOW] = self.processCurrency(y_row[YNAB_HEADER_OUTFLOW])
-        y_row[YNAB_HEADER_INFLOW] = self.processCurrency(y_row[YNAB_HEADER_INFLOW])
+        y_row[YNAB_FIELD_OUTFLOW] = self.processCurrency(y_row[YNAB_FIELD_OUTFLOW])
+        y_row[YNAB_FIELD_INFLOW] = self.processCurrency(y_row[YNAB_FIELD_INFLOW])
 
         self.writer.writerow(y_row)
 
@@ -111,11 +107,11 @@ class baseCSV:
 
 class RevolutCSV(baseCSV):
 
-    def __init__(self, args, reader, write):
+    def __init__(self, args, reader, writer):
         baseCSV.__init__(self, args, reader, writer)
 
     def isBankTopUp(self, row):
-        payee = row[REVOLUT_HEADER_PAYEE]
+        payee = row[REVOLUT_FIELD_PAYEE]
         return payee[:6] == 'Top-Up' or payee[:11] == 'Auto Top-Up'
 
     def ProcessCurrency(self, amount):
@@ -136,31 +132,31 @@ class RevolutCSV(baseCSV):
 
             y_row = {}
             # Do Date
-            r_date = r_row[REVOLUT_HEADER_DATE]
+            r_date = r_row[REVOLUT_FIELD_DATE]
             y_date = datetime.datetime.strptime(r_date, '%d %B %Y')
             y_date = (datetime.date.strftime(y_date, "%d/%m/%Y"))
-            y_row[YNAB_HEADER_DATE] = y_date
+            y_row[YNAB_FIELD_DATE] = y_date
 
             # Payee
-            y_row[YNAB_HEADER_PAYEE] = r_row[REVOLUT_HEADER_PAYEE]
+            y_row[YNAB_FIELD_PAYEE] = r_row[REVOLUT_FIELD_PAYEE]
 
             # Category
 
             if self.args.category:
-                y_row[YNAB_HEADER_CATEGORY] = r_row[REVOLUT_HEADER_CATEGORY]
+                y_row[YNAB_FIELD_CATEGORY] = r_row[REVOLUT_FIELD_CATEGORY]
             else:
-                y_row[YNAB_HEADER_CATEGORY] = ''
+                y_row[YNAB_FIELD_CATEGORY] = ''
 
             # Memo
             if self.args.memo:
-                y_row[YNAB_HEADER_MEMO] = r_row['Exchange Out'] + r_row['Exchange In']
+                y_row[YNAB_FIELD_MEMO] = r_row['Exchange Out'] + r_row['Exchange In']
             else:
-                y_row[YNAB_HEADER_MEMO] = ''
+                y_row[YNAB_FIELD_MEMO] = ''
 
             # Inflow, Outflow
 
-            y_row[YNAB_HEADER_INFLOW] = self.ProcessCurrency(r_row[REVOLUT_HEADER_INFLOW])
-            y_row[YNAB_HEADER_OUTFLOW] = self.ProcessCurrency(r_row[REVOLUT_HEADER_OUTFLOW])
+            y_row[YNAB_FIELD_INFLOW] = self.ProcessCurrency(r_row[REVOLUT_FIELD_INFLOW])
+            y_row[YNAB_FIELD_OUTFLOW] = self.ProcessCurrency(r_row[REVOLUT_FIELD_OUTFLOW])
 
 
             self.writeRow(y_row)
@@ -189,24 +185,24 @@ class PaypalCSV(baseCSV):
         baseCSV.__init__(self, args, reader, writer)
 
     def isCompleted(self, row):
-        return row[PAYPAL_HEADER_STATUS] == 'Completed'
+        return row[PAYPAL_FIELD_STATUS] == 'Completed'
 
     def isBankTopUp(self, row):
-        return row[PAYPAL_HEADER_PAYEE] == 'Bank Account' and row[PAYPAL_HEADER_TYPE] == 'Add Money from a Bank Account'
+        return row[PAYPAL_FIELD_PAYEE] == 'Bank Account' and row[PAYPAL_FIELD_TYPE] == 'Add Money from a Bank Account'
 
     def isTemporaryHold(self, row):
-        return row[PAYPAL_HEADER_PAYEE] == 'PayPal' and row[PAYPAL_HEADER_TYPE] == "Temporary Hold" and \
+        return row[PAYPAL_FIELD_PAYEE] == 'PayPal' and row[PAYPAL_FIELD_TYPE] == "Temporary Hold" and \
             not self.isCompleted(row)
 
     def isPendingBalancePayment(self, row):
-        return row[PAYPAL_HEADER_PAYEE] == 'PayPal' and row[PAYPAL_HEADER_TYPE] == "Pending Balance Payment" and \
+        return row[PAYPAL_FIELD_PAYEE] == 'PayPal' and row[PAYPAL_FIELD_TYPE] == "Pending Balance Payment" and \
             not self.isCompleted(row)
 
     def isCurrencyConversion(self, row):
-        return row[PAYPAL_HEADER_TYPE] == 'Currency Conversion'
+        return row[PAYPAL_FIELD_TYPE] == 'Currency Conversion'
 
     def isBaseCurrency(self, row):
-        return row[PAYPAL_HEADER_CURRENCY] == BASE_CURRENCY
+        return row[PAYPAL_FIELD_CURRENCY] == BASE_CURRENCY
 
     def Convert(self):
         self.writeHeader()
@@ -225,32 +221,32 @@ class PaypalCSV(baseCSV):
 
             if self.isCurrencyConversion(p_row):
                 if self.isBaseCurrency(p_row):
-                    trans_id = p_row[PAYPAL_HEADER_REF_TRANS]
-                    base_amount = p_row[PAYPAL_HEADER_NET]
+                    trans_id = p_row[PAYPAL_FIELD_REF_TRANS]
+                    base_amount = p_row[PAYPAL_FIELD_NET]
                 continue
 
 
             y_row = {}
             # Do Date
-            y_row[YNAB_HEADER_DATE] = p_row[PAYPAL_HEADER_DATE]
+            y_row[YNAB_FIELD_DATE] = p_row[PAYPAL_FIELD_DATE]
 
-            y_row[YNAB_HEADER_PAYEE] = p_row[PAYPAL_HEADER_PAYEE]
-            y_row[YNAB_HEADER_CATEGORY] = ''
+            y_row[YNAB_FIELD_PAYEE] = p_row[PAYPAL_FIELD_PAYEE]
+            y_row[YNAB_FIELD_CATEGORY] = ''
 
             if self.args.memo:
-                y_row[YNAB_HEADER_MEMO] = p_row[PAYPAL_HEADER_MEMO]
+                y_row[YNAB_FIELD_MEMO] = p_row[PAYPAL_FIELD_MEMO]
             else:
-                y_row[YNAB_HEADER_MEMO] = ''
+                y_row[YNAB_FIELD_MEMO] = ''
 
-            y_row[YNAB_HEADER_OUTFLOW] = ''
-            if p_row[PAYPAL_HEADER_TRANS_ID] == trans_id:
-                y_row[YNAB_HEADER_INFLOW] = base_amount
-                y_row[YNAB_HEADER_MEMO] = y_row[YNAB_HEADER_MEMO] + \
-                    " (" + self.absAmount(p_row[PAYPAL_HEADER_NET]) + p_row[PAYPAL_HEADER_CURRENCY] + ")"
+            y_row[YNAB_FIELD_OUTFLOW] = ''
+            if p_row[PAYPAL_FIELD_TRANS_ID] == trans_id:
+                y_row[YNAB_FIELD_INFLOW] = base_amount
+                y_row[YNAB_FIELD_MEMO] = y_row[YNAB_FIELD_MEMO] + \
+                    " (" + self.absAmount(p_row[PAYPAL_FIELD_NET]) + p_row[PAYPAL_FIELD_CURRENCY] + ")"
                 trans_id = '?????????????'
                 base_amount = ''
             else:
-                y_row[YNAB_HEADER_INFLOW] = p_row[PAYPAL_HEADER_NET]
+                y_row[YNAB_FIELD_INFLOW] = p_row[PAYPAL_FIELD_NET]
 
             self.writeRow(y_row)
 
@@ -265,12 +261,13 @@ def run():  # noqa: C901
         print('v%s' % version)
         exit(0)
 
-    source = open(args.source, encoding=args.encoding) if args.source else sys.stdin
 
 #    with open(args.source, newline='') as source:
         # Check we've got a header line
 
     try:
+        source = open(args.source, encoding=args.encoding)  # if args.source else sys.stdin
+
         if not csv.Sniffer().has_header(source.read(1024)):
             print ("ERROR: s does not appear to have a header line.", file=sys.stderr)
             exit(1)
@@ -283,6 +280,7 @@ def run():  # noqa: C901
 
         # Start reading the file
         reader = csv.DictReader(source, delimiter=dialect.delimiter)
+
     except Exception as err:  # pylint: disable=broad-except
         source.close()
         exit(err)
@@ -290,7 +288,7 @@ def run():  # noqa: C901
     try:
         dest = open(args.dest, 'w', encoding=args.encoding) if args.dest else sys.stdout
 
-        writer = csv.DictWriter(dest, YNAB_FIELDNAMES)
+        writer = csv.DictWriter(dest, YNAB_HEADER)
 
         if REVOLUT_IDENTIFIER_KEY in reader.fieldnames:
             csv_processor = RevolutCSV(args, reader, writer)
@@ -302,6 +300,12 @@ def run():  # noqa: C901
             exit(1)
 
         csv_processor.Convert()
+
+    except ValueError:
+        # csv2ofx called with no arguments
+        msg = 0
+        parser.print_help()
+
     finally:
 #        exit(1)
         source.close() if args.source else None
